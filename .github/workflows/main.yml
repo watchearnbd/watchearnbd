@@ -14,8 +14,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project files
-        run: unzip -o ai-enhancer-pro-fixed.zip -d .
+      - name: Extract project files (if a zip exists)
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Found zip: $ZIP_FILE - extracting..."
+            unzip -o "$ZIP_FILE" -d .
+          else
+            echo "No zip file found, assuming project files are already extracted."
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
