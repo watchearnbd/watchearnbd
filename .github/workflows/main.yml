@@ -19,6 +19,16 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Unzip project
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Extracting $ZIP_FILE"
+            unzip -o "$ZIP_FILE" -d .
+          else
+            echo "No zip file found, assuming project already extracted"
+          fi
+
       - name: Generate debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore \
