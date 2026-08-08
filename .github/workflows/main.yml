@@ -22,7 +22,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '9.3.1'
 
       - name: Unzip project
         run: |
@@ -34,8 +34,8 @@ jobs:
 
       - name: Find project directory
         run: |
-          BUILD_FILE=$(find . -name "build.gradle.kts" -not -path "*/.git/*" | head -n 1)
-          echo "build.gradle.kts found at: $BUILD_FILE"
+          BUILD_FILE=$(find . -name "build.gradle.kts" \
+            -not -path "*/.git/*" | head -n 1)
           PROJECT_DIR=$(dirname "$BUILD_FILE")
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
@@ -43,7 +43,7 @@ jobs:
       - name: Generate Gradle Wrapper
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          gradle wrapper --gradle-version 8.9
+          gradle wrapper --gradle-version 9.3.1
           chmod +x gradlew
           ls -la
 
