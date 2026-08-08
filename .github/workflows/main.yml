@@ -24,10 +24,20 @@ jobs:
           ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             echo "Extracting $ZIP_FILE"
-            unzip -o "$ZIP_FILE" -d .
+            unzip -o "$ZIP_FILE" -d extracted
           else
-            echo "No zip file found, assuming project already extracted"
+            echo "No zip file found"
           fi
+
+      - name: Find and move to project
+        run: |
+          GRADLEW=$(find . -name "gradlew" | head -n 1)
+          echo "Found gradlew at: $GRADLEW"
+          PROJECT_DIR=$(dirname "$GRADLEW")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Make gradlew executable
+        run: chmod +x ${{ env.PROJECT_DIR }}/gradlew
 
       - name: Generate debug keystore
         run: |
@@ -41,14 +51,13 @@ jobs:
         with:
           gradle-version: 9.1.0
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
       - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: akshor-posha-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            **/app/build/outputs/apk/debug/*.apk
