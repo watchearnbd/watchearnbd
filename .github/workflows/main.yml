@@ -26,17 +26,23 @@ jobs:
 
       - name: Unzip project
         run: |
-          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 3 -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             echo "Extracting: $ZIP_FILE"
             unzip -o "$ZIP_FILE" -d extracted_project
+          else
+            echo "No zip file found — using repo root as project"
           fi
 
       - name: Find project directory
         run: |
-          BUILD_FILE=$(find . -name "build.gradle.kts" \
+          SETTINGS_FILE=$(find . -name "settings.gradle.kts" \
             --not -path "*/.git/*" | head -n 1)
-          PROJECT_DIR=$(dirname "$BUILD_FILE")
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle.kts not found!"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
@@ -74,4 +80,3 @@ jobs:
         with:
           name: dharma-ai-debug-apk
           path: "**/app/build/outputs/apk/debug/*.apk"
-          
