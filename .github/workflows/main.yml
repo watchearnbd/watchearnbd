@@ -1,0 +1,77 @@
+name: Build Debug APK - Dharma AI
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Unzip project
+        run: |
+          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Extracting: $ZIP_FILE"
+            unzip -o "$ZIP_FILE" -d extracted_project
+          fi
+
+      - name: Find project directory
+        run: |
+          BUILD_FILE=$(find . -name "build.gradle.kts" \
+            --not -path "*/.git/*" | head -n 1)
+          PROJECT_DIR=$(dirname "$BUILD_FILE")
+          echo "Project directory: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Create .env file with Gemini API Key
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
+      - name: Generate Gradle Wrapper
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          gradle wrapper --gradle-version 9.3.1
+          chmod +x gradlew
+          ls -la
+
+      - name: Generate debug keystore
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          keytool -genkey -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dharma-ai-debug-apk
+          path: "**/app/build/outputs/apk/debug/*.apk"
+          
