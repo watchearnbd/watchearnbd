@@ -49,7 +49,12 @@ jobs:
       - name: Create .env file with Gemini API Key
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+          KEY="${{ secrets.GEMINI_API_KEY }}"
+          if [ -z "$KEY" ]; then
+            echo "No GEMINI_API_KEY secret found - using dummy value for test build"
+            KEY="dummy_test_key_for_build_only"
+          fi
+          echo "GEMINI_API_KEY=$KEY" > .env
 
       - name: Generate Gradle Wrapper
         working-directory: ${{ env.PROJECT_DIR }}
