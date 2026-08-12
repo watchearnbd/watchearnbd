@@ -37,7 +37,7 @@ jobs:
       - name: Find project directory
         run: |
           SETTINGS_FILE=$(find . -name "settings.gradle.kts" \
-            --not -path "*/.git/*" | head -n 1)
+            -not -path "*/.git/*" | head -n 1)
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: settings.gradle.kts not found!"
             exit 1
