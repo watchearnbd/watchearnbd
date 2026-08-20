@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25   # পুরো job ২৫ মিনিটের বেশি hang হতে পারবে না
+    timeout-minutes: 45  # Firebase AI + KSP + Compose = heavy build; 25 was too short
 
     steps:
       - name: Checkout repo
@@ -20,20 +20,13 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
+      # gradle/actions/setup-gradle already handles caching better than actions/cache alone.
+      # Using both caused cache conflicts — removed the manual cache step.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+          cache-read-only: false   # allow writing to cache on first run
 
       - name: Unzip project (if ZIP found)
         run: |
@@ -57,15 +50,57 @@ jobs:
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
-      - name: Create .env file with Gemini API Key
+      # The google-services plugin is applied but google-services.json is missing.
+      # The project already sets missingGoogleServicesStrategy = WARN in build.gradle.kts
+      # and googleServices.missing.passthrough=true in gradle.properties, so the build
+      # won't fail — but we still create a minimal stub to silence the warning entirely
+      # and avoid any plugin overhead during the config phase.
+      - name: Create stub google-services.json
+        working-directory: ${{ env.PROJECT_DIR }}/app
+        run: |
+          # Use real secret if available, otherwise write a minimal valid stub.
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
+            echo "google-services.json from secret ✅"
+          else
+            cat > google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id":     "stub-project",
+              "storage_bucket": "stub-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": { "package_name": "com.example" }
+                },
+                "api_key":      [{ "current_key": "stub" }],
+                "services":     {}
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+            echo "Stub google-services.json created ✅"
+          fi
+
+      - name: Create .env file with API keys
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          KEY="${{ secrets.GEMINI_API_KEY }}"
-          if [ -z "$KEY" ]; then
-            echo "⚠️  No GEMINI_API_KEY secret found – using dummy value for test build"
-            KEY="dummy_test_key_for_build_only"
+          GEMINI_KEY="${{ secrets.GEMINI_API_KEY }}"
+          if [ -z "$GEMINI_KEY" ]; then
+            echo "⚠️  No GEMINI_API_KEY secret – using dummy value for build"
+            GEMINI_KEY="dummy_test_key_for_build_only"
           fi
-          echo "GEMINI_API_KEY=$KEY" > .env
+          # Write all keys the Secrets plugin expects (matches .env.example)
+          cat > .env <<EOF
+          GEMINI_API_KEY=$GEMINI_KEY
+          GOOGLE_SEARCH_API_KEY=${{ secrets.GOOGLE_SEARCH_API_KEY }}
+          GOOGLE_SEARCH_CX=${{ secrets.GOOGLE_SEARCH_CX }}
+          YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
+          EOF
           echo ".env file created ✅"
 
       - name: Generate Gradle Wrapper
@@ -73,7 +108,6 @@ jobs:
         run: |
           gradle wrapper --gradle-version 9.3.1
           chmod +x gradlew
-          ls -la
 
       - name: Generate debug keystore
         working-directory: ${{ env.PROJECT_DIR }}
@@ -91,11 +125,15 @@ jobs:
 
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        timeout-minutes: 15   # এই step আলাদাভাবেও সীমাবদ্ধ
+        # No separate step timeout — the job-level 45 min covers it.
+        # configuration-cache is already ON in gradle.properties; --no-daemon is correct for CI.
         run: |
-          ./gradlew assembleDebug --stacktrace --no-daemon \
-            -Dorg.gradle.internal.http.connectionTimeout=60000 \
-            -Dorg.gradle.internal.http.socketTimeout=60000
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --warning-mode all \
+            -Dorg.gradle.internal.http.connectionTimeout=120000 \
+            -Dorg.gradle.internal.http.socketTimeout=120000
 
       - name: Show APK info
         working-directory: ${{ env.PROJECT_DIR }}
@@ -116,3 +154,4 @@ jobs:
           path: "**/app/build/outputs/apk/debug/*.apk"
           retention-days: 7
           if-no-files-found: error
+          
