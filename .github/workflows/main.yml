@@ -125,7 +125,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        # No separate step timeout — the job-level 45 min covers it.
+        # No separate step timeout — the job-level 1 min covers it.
         # configuration-cache is already ON in gradle.properties; --no-daemon is correct for CI.
         run: |
           ./gradlew assembleDebug \
