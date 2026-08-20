@@ -8,20 +8,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25   # পুরো job ২৫ মিনিটের বেশি hang হতে পারবে না
 
     steps:
-      # ── ১. রিপো চেকআউট ──────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ── ২. JDK সেটআপ ─────────────────────────────────────────────
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      # ── ৩. Gradle ক্যাশ (বিল্ড দ্রুত করে) ──────────────────────
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -32,13 +30,11 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      # ── ৪. Gradle Wrapper সেটআপ ──────────────────────────────────
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      # ── ৫. ZIP আনজিপ (যদি প্রজেক্ট ZIP হিসেবে আপলোড থাকে) ──────
       - name: Unzip project (if ZIP found)
         run: |
           ZIP_FILE=$(find . -maxdepth 3 -name "*.zip" | head -n 1)
@@ -49,7 +45,6 @@ jobs:
             echo "No zip file found – using repo root as project"
           fi
 
-      # ── ৬. settings.gradle.kts খুঁজে PROJECT_DIR সেট ────────────
       - name: Find project directory
         run: |
           SETTINGS_FILE=$(find . -name "settings.gradle.kts" \
@@ -62,7 +57,6 @@ jobs:
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
-      # ── ৭. .env ফাইল তৈরি (Gemini API Key দিয়ে) ─────────────────
       - name: Create .env file with Gemini API Key
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -74,7 +68,6 @@ jobs:
           echo "GEMINI_API_KEY=$KEY" > .env
           echo ".env file created ✅"
 
-      # ── ৮. Gradle Wrapper জেনারেট ────────────────────────────────
       - name: Generate Gradle Wrapper
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -82,7 +75,6 @@ jobs:
           chmod +x gradlew
           ls -la
 
-      # ── ৯. Debug Keystore তৈরি ───────────────────────────────────
       - name: Generate debug keystore
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -97,12 +89,14 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US"
           echo "debug.keystore created ✅"
 
-      # ── ১০. Debug APK বিল্ড ──────────────────────────────────────
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: ./gradlew assembleDebug --stacktrace
+        timeout-minutes: 15   # এই step আলাদাভাবেও সীমাবদ্ধ
+        run: |
+          ./gradlew assembleDebug --stacktrace --no-daemon \
+            -Dorg.gradle.internal.http.connectionTimeout=60000 \
+            -Dorg.gradle.internal.http.socketTimeout=60000
 
-      # ── ১১. APK-এর সাইজ ও পাথ দেখাও ────────────────────────────
       - name: Show APK info
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -115,7 +109,6 @@ jobs:
             exit 1
           fi
 
-      # ── ১২. APK আর্টিফ্যাক্ট হিসেবে আপলোড ──────────────────────
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
